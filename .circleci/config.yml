@@ -1,0 +1,87 @@
+version: 2.1
+
+executors:
+  arm64:
+    machine:
+      image: ubuntu-2204:2023.07.1
+    resource_class: arm.medium
+
+jobs:
+  build:
+    executor: arm64
+    steps:
+      - checkout
+
+      - run:
+          name: Create Flutter version file
+          command: |
+            echo "3.24.0" > flutter_version.txt
+
+      - restore_cache:
+          keys:
+            - flutter-sdk-{{ checksum "flutter_version.txt" }}
+            - flutter-sdk-
+
+      - run:
+          name: Install Basic Dependencies
+          command: |
+            sudo apt-get update -y
+            sudo apt-get install -y \
+              curl \
+              git \
+              unzip \
+              xz-utils \
+              zip \
+              libglu1-mesa \
+              clang cmake \
+              ninja-build pkg-config \
+              libgtk-3-dev liblzma-dev \
+              libstdc++-12-dev
+
+      - run:
+          name: Install Flutter SDK for ARM64
+          command: |
+            FLUTTER_VERSION=$(cat flutter_version.txt)
+            if [ ! -d "flutter" ]; then
+              git clone https://github.com/flutter/flutter.git -b stable
+              cd flutter
+              git checkout ${FLUTTER_VERSION}
+            fi
+            echo 'export PATH="$HOME/project/flutter/bin:$PATH"' >> $BASH_ENV
+            source $BASH_ENV
+
+            export FLUTTER_ENGINE_NO_PRECOMPILED_BINARIES=true
+
+            flutter precache
+            flutter doctor -v
+
+      - save_cache:
+          paths:
+            - flutter
+          key: flutter-sdk-{{ checksum "flutter_version.txt" }}
+
+      - run:
+          name: Configure Flutter for Linux
+          command: |
+            flutter config --enable-linux-desktop
+
+      - run:
+          name: Build Flutter app for Linux ARM64
+          command: |
+            flutter build linux --release --target-platform=linux-arm64
+
+      - run:
+          name: Zip build artifacts
+          command: |
+            cd build/linux/arm64/release/bundle
+            zip -r ../../../../../build_artifacts.zip .
+
+      - store_artifacts:
+          path: build_artifacts.zip
+          destination: build_artifacts.zip
+
+workflows:
+  version: 2
+  build-and-test:
+    jobs:
+      - build
