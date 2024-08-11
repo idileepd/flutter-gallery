@@ -82,6 +82,6 @@ jobs:
 
 workflows:
   version: 2
-  build-and-test:
+  build-linux-arm-gallery:
     jobs:
       - build
